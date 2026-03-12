@@ -141,10 +141,23 @@ private struct BottomTabBar: View {
         .foregroundStyle(selected ? .white : Color.white.opacity(0.64))
         .background(tabBackground(selected: selected))
         .overlay(tabBorder(selected: selected))
+        .background(shortcutBridge(for: section))
         .contentShape(Rectangle())
         .onTapGesture {
             selectedSection = section
         }
+    }
+
+    @ViewBuilder
+    private func shortcutBridge(for section: ContentView.AppSection) -> some View {
+        Button("") {
+            selectedSection = section
+        }
+        .keyboardShortcut(section.shortcutKey, modifiers: [.command])
+        .labelsHidden()
+        .opacity(0.001)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 
     private func tabBackground(selected: Bool) -> some View {
@@ -159,11 +172,24 @@ private struct BottomTabBar: View {
 
     private var selectedGradient: LinearGradient {
         LinearGradient(
-            colors: [Color(hex: "0a84ff"), Color(hex: "5ac8fa")],
+            colors: [Color.white.opacity(0.14), Color.white.opacity(0.08)],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
         )
     }
+}
+
+private extension ContentView.AppSection {
+    var shortcutKey: KeyEquivalent {
+        switch self {
+        case .situation: return "1"
+        case .markets: return "2"
+        case .predictions: return "3"
+        case .portfolio: return "4"
+        case .settings: return "5"
+        }
+    }
+
 }
 
 private struct SharedErrorBanner: View {

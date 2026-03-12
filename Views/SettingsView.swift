@@ -11,122 +11,38 @@ struct SettingsView: View {
 
     var body: some View {
         NavigationStack {
-            Group {
-                settingsList()
-            }
-            .navigationTitle("Settings")
+            settingsContent
+                .navigationTitle("Settings")
         }
     }
 
-    private func settingsList() -> some View {
-        List {
-            if appState.isLoggedIn {
-                Section {
-                    HStack(spacing: 14) {
-                        ZStack {
-                            Circle()
-                                .fill(Color(hex: "0071e3").opacity(0.2))
-                                .frame(width: 56, height: 56)
-                            Text(avatarInitial)
-                                .font(.title2.weight(.semibold))
-                                .foregroundStyle(Color(hex: "0071e3"))
-                        }
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(appState.user?.email ?? "")
-                                .font(.body)
-                            Text(tierLabel)
-                                .font(.caption)
-                                .foregroundStyle(tierColor)
-                        }
-                    }
-                    .padding(.vertical, 4)
-                }
-
-                Section("Subscription") {
-                    ForEach(SubscriptionTier.allCases) { tier in
-                        HStack {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(tier.title)
-                                if let price = tier.price {
-                                    Text(price)
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-
-                            Spacer()
-
-                            if normalizedTier == tier {
-                                Image(systemName: "checkmark")
-                                    .font(.body.weight(.semibold))
-                                    .foregroundStyle(Color(hex: "0071e3"))
-                            } else if tier != .free {
-                                Text("Upgrade")
-                                    .font(.caption.weight(.medium))
-                                    .foregroundStyle(Color(hex: "0071e3"))
-                            }
-                        }
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            guard tier != normalizedTier, tier != .free else { return }
-                            upgradeTarget = tier
-                            showUpgradeAlert = true
-                        }
-                    }
-                }
-                .alert("Upgrade to \(upgradeTarget?.title ?? "")", isPresented: $showUpgradeAlert) {
-                    Button("Open Web Upgrade") {
-                        if let url = URL(string: "https://opticon.heyitsmejosh.com/settings") {
-                            openURL(url)
-                        }
-                    }
-                    Button("Cancel", role: .cancel) {}
-                } message: {
-                    Text("Subscription upgrades are handled on the web. You will be redirected to opticon.heyitsmejosh.com to complete the upgrade.")
-                }
-
-                Section("Account") {
-                    Button("Change Email") {
-                        showChangeEmail = true
-                    }
-
-                    Button("Change Password") {
-                        showChangePassword = true
-                    }
-                }
-
-                Section("Map Sources") {
-                    Toggle("Earthquakes", isOn: earthquakesBinding)
-                    Toggle("Flights", isOn: flightsBinding)
-                    Toggle("Incidents", isOn: incidentsBinding)
-                    Toggle("Weather Alerts", isOn: weatherBinding)
-                }
-
-                Section {
-                    Button(role: .destructive) {
-                        Task { await appState.logout() }
-                    } label: {
-                        Text("Sign Out")
-                            .frame(maxWidth: .infinity, alignment: .center)
-                    }
-                }
-
-                Section("Danger Zone") {
-                    Button(role: .destructive) {
-                        showDeleteAccount = true
-                    } label: {
-                        Text("Delete Account")
-                    }
-                }
-            } else {
-                Section {
-                    Button("Sign In") {
-                        appState.showLogin = true
-                    }
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .tint(Color(hex: "0071e3"))
+    private var settingsContent: some View {
+        ScrollView {
+            VStack(spacing: 18) {
+                if appState.isLoggedIn {
+                    profileCard
+                    subscriptionCard
+                    accountCard
+                    mapSourcesCard
+                    signOutCard
+                    dangerZoneCard
+                } else {
+                    signedOutCard
                 }
             }
+            .padding(.horizontal, 20)
+            .padding(.top, 16)
+            .padding(.bottom, 96)
+        }
+        .alert("Upgrade to \(upgradeTarget?.title ?? "")", isPresented: $showUpgradeAlert) {
+            Button("Open Web Upgrade") {
+                if let url = URL(string: "https://opticon.heyitsmejosh.com/settings") {
+                    openURL(url)
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Subscription upgrades are handled on the web. You will be redirected to opticon.heyitsmejosh.com to complete the upgrade.")
         }
         .sheet(isPresented: $showChangeEmail) {
             ChangeEmailSheet()
@@ -139,6 +55,195 @@ struct SettingsView: View {
         .sheet(isPresented: $showDeleteAccount) {
             DeleteAccountSheet()
                 .environment(appState)
+        }
+    }
+
+    private var profileCard: some View {
+        ZStack(alignment: .topTrailing) {
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(Color.white.opacity(0.05))
+
+            VStack(alignment: .leading, spacing: 16) {
+                HStack(spacing: 14) {
+                    ZStack {
+                        Circle()
+                            .fill(Color.white.opacity(0.12))
+                            .frame(width: 62, height: 62)
+                        Text(avatarInitial)
+                            .font(.title2.weight(.bold))
+                            .foregroundStyle(.white)
+                    }
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(appState.user?.email ?? "")
+                            .font(.headline)
+                        Text("Opticon \(tierLabel)")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(tierColor)
+                    }
+                }
+
+                HStack(spacing: 10) {
+                    statPill(title: "Plan", value: tierLabel)
+                    statPill(title: "Sources", value: "\(enabledSourceCount)/4 on")
+                    statPill(title: "Shell", value: "macOS")
+                }
+            }
+            .padding(20)
+        }
+        .overlay(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+        )
+    }
+
+    private var subscriptionCard: some View {
+        settingsCard("Subscription", subtitle: "Manage what plan you are on and where upgrades happen.") {
+            VStack(spacing: 10) {
+                ForEach(SubscriptionTier.allCases) { tier in
+                    Button {
+                        guard tier != normalizedTier, tier != .free else { return }
+                        upgradeTarget = tier
+                        showUpgradeAlert = true
+                    } label: {
+                        HStack(spacing: 14) {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(tier.title)
+                                    .font(.subheadline.weight(.semibold))
+                                if let price = tier.price {
+                                    Text(price)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+
+                            Spacer()
+
+                            if normalizedTier == tier {
+                                Label("Current", systemImage: "checkmark.circle.fill")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(Color(hex: "5ac8fa"))
+                            } else if tier != .free {
+                                Text("Upgrade")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(Color(hex: "0a84ff"))
+                            }
+                        }
+                        .padding(14)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .fill(normalizedTier == tier ? Color.white.opacity(0.08) : Color.white.opacity(0.04))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .stroke(normalizedTier == tier ? Color(hex: "0a84ff").opacity(0.35) : Color.white.opacity(0.05), lineWidth: 1)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    private var accountCard: some View {
+        settingsCard("Account", subtitle: "Update the credentials tied to this macOS session.") {
+            HStack(spacing: 12) {
+                actionTile(
+                    title: "Change Email",
+                    subtitle: "Update your login address",
+                    systemImage: "envelope"
+                ) {
+                    showChangeEmail = true
+                }
+
+                actionTile(
+                    title: "Change Password",
+                    subtitle: "Rotate your account password",
+                    systemImage: "lock"
+                ) {
+                    showChangePassword = true
+                }
+            }
+        }
+    }
+
+    private var mapSourcesCard: some View {
+        settingsCard("Map Sources", subtitle: "Choose which live feeds appear on the map.") {
+            VStack(spacing: 12) {
+                sourceToggleRow(
+                    title: "Earthquakes",
+                    subtitle: "Seismic activity and tremors",
+                    systemImage: "waveform.path.ecg",
+                    isOn: earthquakesBinding
+                )
+                sourceToggleRow(
+                    title: "Flights",
+                    subtitle: "Aircraft positions and movement",
+                    systemImage: "airplane",
+                    isOn: flightsBinding
+                )
+                sourceToggleRow(
+                    title: "Incidents",
+                    subtitle: "Closures, alerts, and disruptions",
+                    systemImage: "exclamationmark.triangle",
+                    isOn: incidentsBinding
+                )
+                sourceToggleRow(
+                    title: "Weather Alerts",
+                    subtitle: "Warnings, watches, and advisories",
+                    systemImage: "cloud.rain",
+                    isOn: weatherBinding
+                )
+            }
+        }
+    }
+
+    private var signOutCard: some View {
+        settingsCard("Session", subtitle: "End the current authenticated session on this Mac.") {
+            Button(role: .destructive) {
+                Task { await appState.logout() }
+            } label: {
+                Text("Sign Out")
+                    .font(.subheadline.weight(.semibold))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+            }
+            .buttonStyle(.bordered)
+            .tint(.red)
+        }
+    }
+
+    private var dangerZoneCard: some View {
+        settingsCard("Danger Zone", subtitle: "Permanent account actions live here.") {
+            Button(role: .destructive) {
+                showDeleteAccount = true
+            } label: {
+                HStack {
+                    Label("Delete Account", systemImage: "trash")
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.secondary)
+                }
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(Color.red.opacity(0.08))
+                )
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private var signedOutCard: some View {
+        settingsCard("Sign In", subtitle: "Authenticate to manage your Opticon account and source toggles.") {
+            Button("Open Login") {
+                appState.showLogin = true
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(Color(hex: "0a84ff"))
         }
     }
 
@@ -202,6 +307,132 @@ struct SettingsView: View {
         default:
             return .free
         }
+    }
+
+    private var enabledSourceCount: Int {
+        [
+            appState.situationEarthquakesEnabled,
+            appState.situationFlightsEnabled,
+            appState.situationIncidentsEnabled,
+            appState.situationWeatherEnabled,
+        ]
+        .filter { $0 }
+        .count
+    }
+
+    private func settingsCard<Content: View>(
+        _ title: String,
+        subtitle: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.headline)
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            content()
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(.ultraThinMaterial)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(Color.white.opacity(0.06), lineWidth: 1)
+        )
+    }
+
+    private func statPill(title: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title.uppercased())
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.white.opacity(0.55))
+            Text(value)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.white)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .background(
+            Capsule()
+                .fill(Color.white.opacity(0.08))
+        )
+    }
+
+    private func actionTile(
+        title: String,
+        subtitle: String,
+        systemImage: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 10) {
+                Image(systemName: systemImage)
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(Color(hex: "5ac8fa"))
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+            .frame(maxWidth: .infinity, minHeight: 112, alignment: .topLeading)
+            .padding(14)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(Color.white.opacity(0.04))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(Color.white.opacity(0.05), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func sourceToggleRow(
+        title: String,
+        subtitle: String,
+        systemImage: String,
+        isOn: Binding<Bool>
+    ) -> some View {
+        HStack(spacing: 14) {
+            Image(systemName: systemImage)
+                .font(.headline)
+                .foregroundStyle(Color(hex: "5ac8fa"))
+                .frame(width: 22)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            Toggle("", isOn: isOn)
+                .labelsHidden()
+                .toggleStyle(.switch)
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color.white.opacity(0.04))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.white.opacity(0.05), lineWidth: 1)
+        )
     }
 }
 

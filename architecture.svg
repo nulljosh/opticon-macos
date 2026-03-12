@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 400" width="600" height="400">
+  <rect width="600" height="400" fill="#ffffff"/>
+  <!-- macOS App -->
+  <rect x="40" y="60" width="160" height="80" rx="12" fill="#f5f5f7" stroke="#d2d2d7" stroke-width="1"/>
+  <text x="120" y="95" text-anchor="middle" font-family="-apple-system, SF Pro Display, sans-serif" font-size="13" font-weight="600" fill="#1d1d1f">Opticon macOS</text>
+  <text x="120" y="115" text-anchor="middle" font-family="-apple-system, SF Pro Text, sans-serif" font-size="10" fill="#86868b">SwiftUI + Charts</text>
+  <!-- Vercel API -->
+  <rect x="340" y="60" width="160" height="80" rx="12" fill="#f5f5f7" stroke="#d2d2d7" stroke-width="1"/>
+  <text x="420" y="95" text-anchor="middle" font-family="-apple-system, SF Pro Display, sans-serif" font-size="13" font-weight="600" fill="#1d1d1f">Vercel API</text>
+  <text x="420" y="115" text-anchor="middle" font-family="-apple-system, SF Pro Text, sans-serif" font-size="10" fill="#86868b">Next.js + KV</text>
+  <!-- Arrow -->
+  <line x1="200" y1="100" x2="340" y2="100" stroke="#0071e3" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+  <text x="270" y="92" text-anchor="middle" font-family="-apple-system, SF Pro Text, sans-serif" font-size="9" fill="#86868b">HTTPS</text>
+  <!-- Data Sources -->
+  <rect x="340" y="200" width="160" height="60" rx="12" fill="#f5f5f7" stroke="#d2d2d7" stroke-width="1"/>
+  <text x="420" y="228" text-anchor="middle" font-family="-apple-system, SF Pro Display, sans-serif" font-size="13" font-weight="600" fill="#1d1d1f">Data Providers</text>
+  <text x="420" y="245" text-anchor="middle" font-family="-apple-system, SF Pro Text, sans-serif" font-size="9" fill="#86868b">GDELT, Yahoo, Polymarket</text>
+  <line x1="420" y1="140" x2="420" y2="200" stroke="#86868b" stroke-width="1" stroke-dasharray="4,3"/>
+  <!-- Keychain -->
+  <rect x="40" y="200" width="160" height="60" rx="12" fill="#f5f5f7" stroke="#d2d2d7" stroke-width="1"/>
+  <text x="120" y="228" text-anchor="middle" font-family="-apple-system, SF Pro Display, sans-serif" font-size="13" font-weight="600" fill="#1d1d1f">Keychain + Touch ID</text>
+  <text x="120" y="245" text-anchor="middle" font-family="-apple-system, SF Pro Text, sans-serif" font-size="9" fill="#86868b">LocalAuthentication</text>
+  <line x1="120" y1="140" x2="120" y2="200" stroke="#86868b" stroke-width="1" stroke-dasharray="4,3"/>
+  <defs>
+    <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#0071e3"/>
+    </marker>
+  </defs>
+</svg>

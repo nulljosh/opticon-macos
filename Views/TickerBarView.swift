@@ -4,15 +4,22 @@ struct TickerBarView: View {
     let appState: AppState
     var onSelectStock: ((Stock) -> Void)? = nil
 
-    @State private var singleTrackWidth: CGFloat = 0
     @State private var trackOffset: CGFloat = 0
     @State private var isHovering = false
+    @State private var containerWidth: CGFloat = 0
+    @State private var singleTrackWidth: CGFloat = 0
 
     private let itemSpacing: CGFloat = 18
     private let animationSpeed: CGFloat = 40
 
     private var visibleStocks: [Stock] {
         Array(appState.stocks.prefix(14))
+    }
+
+    private var stockIdentity: Int {
+        var hasher = Hasher()
+        for stock in visibleStocks { hasher.combine(stock.id) }
+        return hasher.finalize()
     }
 
     var body: some View {
@@ -22,27 +29,11 @@ struct TickerBarView: View {
                     Color.clear
                 } else {
                     HStack(spacing: itemSpacing) {
-                        tickerTrack(visibleStocks)
-                        tickerTrack(visibleStocks)
+                        tickerTrack(visibleStocks, measureWidth: true)
+                        tickerTrack(visibleStocks, measureWidth: false)
                     }
                     .fixedSize(horizontal: true, vertical: false)
                     .offset(x: trackOffset)
-                    .onAppear {
-                        restartAnimation(containerWidth: geometry.size.width)
-                    }
-                    .onChange(of: visibleStocks.map(\.id)) { _, _ in
-                        restartAnimation(containerWidth: geometry.size.width)
-                    }
-                    .onChange(of: singleTrackWidth) { _, _ in
-                        restartAnimation(containerWidth: geometry.size.width)
-                    }
-                    .onChange(of: isHovering) { _, hovering in
-                        if hovering {
-                            stopAnimation()
-                        } else {
-                            restartAnimation(containerWidth: geometry.size.width)
-                        }
-                    }
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
@@ -50,6 +41,11 @@ struct TickerBarView: View {
             .onHover { hovering in
                 isHovering = hovering
             }
+            .onAppear { containerWidth = geometry.size.width }
+            .onChange(of: geometry.size.width) { _, w in containerWidth = w }
+        }
+        .onChange(of: animationInputs) { _, _ in
+            syncAnimation()
         }
         .padding(.horizontal, 12)
         .frame(maxWidth: .infinity)
@@ -61,7 +57,7 @@ struct TickerBarView: View {
         .clipped()
     }
 
-    private func tickerTrack(_ stocks: [Stock]) -> some View {
+    private func tickerTrack(_ stocks: [Stock], measureWidth: Bool) -> some View {
         HStack(spacing: itemSpacing) {
             ForEach(stocks) { stock in
                 Button {
@@ -73,25 +69,24 @@ struct TickerBarView: View {
             }
         }
         .fixedSize(horizontal: true, vertical: false)
-        .background(trackWidthReader)
+        .background(measureWidth ? AnyView(widthReader) : AnyView(EmptyView()))
     }
 
-    private var trackWidthReader: some View {
-        GeometryReader { geometry in
+    private var widthReader: some View {
+        GeometryReader { geo in
             Color.clear
-                .onAppear {
-                    singleTrackWidth = geometry.size.width
-                }
-                .onChange(of: geometry.size.width) { _, width in
-                    singleTrackWidth = width
-                }
+                .onAppear { singleTrackWidth = geo.size.width }
+                .onChange(of: geo.size.width) { _, w in singleTrackWidth = w }
         }
     }
 
-    private func restartAnimation(containerWidth: CGFloat) {
-        guard !isHovering else { return }
-        guard singleTrackWidth > containerWidth, visibleStocks.count > 1 else {
-            stopAnimation()
+    private var animationInputs: [Int] {
+        [stockIdentity, Int(singleTrackWidth), Int(containerWidth), isHovering ? 1 : 0]
+    }
+
+    private func syncAnimation() {
+        guard !isHovering, singleTrackWidth > containerWidth, visibleStocks.count > 1 else {
+            withAnimation(.none) { trackOffset = 0 }
             return
         }
 
@@ -101,12 +96,6 @@ struct TickerBarView: View {
         trackOffset = 0
         withAnimation(.linear(duration: duration).repeatForever(autoreverses: false)) {
             trackOffset = -distance
-        }
-    }
-
-    private func stopAnimation() {
-        withAnimation(.none) {
-            trackOffset = 0
         }
     }
 }

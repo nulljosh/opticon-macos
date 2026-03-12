@@ -189,7 +189,6 @@ private extension ContentView.AppSection {
         case .settings: return "5"
         }
     }
-
 }
 
 private struct SharedErrorBanner: View {

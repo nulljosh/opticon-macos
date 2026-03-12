@@ -175,25 +175,25 @@ struct SettingsView: View {
                     title: "Earthquakes",
                     subtitle: "Seismic activity and tremors",
                     systemImage: "waveform.path.ecg",
-                    isOn: earthquakesBinding
+                    isOn: sourceBinding(\.situationEarthquakesEnabled)
                 )
                 sourceToggleRow(
                     title: "Flights",
                     subtitle: "Aircraft positions and movement",
                     systemImage: "airplane",
-                    isOn: flightsBinding
+                    isOn: sourceBinding(\.situationFlightsEnabled)
                 )
                 sourceToggleRow(
                     title: "Incidents",
                     subtitle: "Closures, alerts, and disruptions",
                     systemImage: "exclamationmark.triangle",
-                    isOn: incidentsBinding
+                    isOn: sourceBinding(\.situationIncidentsEnabled)
                 )
                 sourceToggleRow(
                     title: "Weather Alerts",
                     subtitle: "Warnings, watches, and advisories",
                     systemImage: "cloud.rain",
-                    isOn: weatherBinding
+                    isOn: sourceBinding(\.situationWeatherEnabled)
                 )
             }
         }
@@ -252,31 +252,10 @@ struct SettingsView: View {
         return String(first).uppercased()
     }
 
-    private var earthquakesBinding: Binding<Bool> {
+    private func sourceBinding(_ keyPath: ReferenceWritableKeyPath<AppState, Bool>) -> Binding<Bool> {
         Binding(
-            get: { appState.situationEarthquakesEnabled },
-            set: { appState.situationEarthquakesEnabled = $0 }
-        )
-    }
-
-    private var flightsBinding: Binding<Bool> {
-        Binding(
-            get: { appState.situationFlightsEnabled },
-            set: { appState.situationFlightsEnabled = $0 }
-        )
-    }
-
-    private var incidentsBinding: Binding<Bool> {
-        Binding(
-            get: { appState.situationIncidentsEnabled },
-            set: { appState.situationIncidentsEnabled = $0 }
-        )
-    }
-
-    private var weatherBinding: Binding<Bool> {
-        Binding(
-            get: { appState.situationWeatherEnabled },
-            set: { appState.situationWeatherEnabled = $0 }
+            get: { appState[keyPath: keyPath] },
+            set: { appState[keyPath: keyPath] = $0 }
         )
     }
 

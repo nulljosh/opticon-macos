@@ -30,7 +30,13 @@ Requires macOS 14+, Swift 6.0, Xcode 26+.
 
 ![Architecture](architecture.svg)
 
-macOS app talks to the Vercel API (same backend as web + iOS). Auth is stored in Keychain with optional Touch ID unlock. The shell uses a bottom tab bar with Cmd+1-5 keyboard shortcuts, the map uses viewport-driven reloads, and the markets ticker scrolls as a marquee (pauses on hover). Settings uses a card-based ScrollView layout. The Markets view supports in-place resorting by symbol, name, price, P/E, market cap, and daily change.
+- Vercel API backend (shared with web + iOS)
+- Keychain auth with optional Touch ID unlock
+- Bottom tab bar shell, Cmd+1-5 keyboard shortcuts
+- Viewport-driven map reloads
+- Marquee ticker with hover-to-pause
+- Card-based Settings layout
+- Markets sortable by symbol, name, price, P/E, market cap, change
 
 ## License
 

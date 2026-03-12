@@ -6,6 +6,8 @@ struct MarketsView: View {
     @State private var isVisible = false
     @State private var hasLoaded = false
     @State private var selectedStock: Stock?
+    @State private var sortField: MarketSortField = .change
+    @State private var sortAscending = false
 
     private let refreshTimer = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
 
@@ -17,29 +19,108 @@ struct MarketsView: View {
         for stock in appState.stocks {
             items.append(MarketItem(
                 name: stock.name, symbol: stock.symbol, price: stock.price,
-                changePercent: stock.changePercent, kind: .stock(stock)
+                changePercent: stock.changePercent, marketCap: stock.marketCap,
+                peRatio: stock.peRatio, kind: .stock(stock)
             ))
         }
         for commodity in appState.commodities {
             items.append(MarketItem(
                 name: commodity.name, symbol: commodity.name, price: commodity.price,
-                changePercent: commodity.changePercent, kind: .commodity
+                changePercent: commodity.changePercent, marketCap: nil,
+                peRatio: nil, kind: .commodity
             ))
         }
         for coin in appState.crypto {
             items.append(MarketItem(
                 name: coin.symbol, symbol: coin.symbol, price: coin.spot,
-                changePercent: coin.chgPct, kind: .crypto
+                changePercent: coin.chgPct, marketCap: nil,
+                peRatio: nil, kind: .crypto
             ))
         }
-        return items.sorted { $0.changePercent > $1.changePercent }
+        return items
     }
 
     private var filteredItems: [MarketItem] {
-        if searchText.isEmpty { return allItems }
-        return allItems.filter {
-            $0.name.localizedCaseInsensitiveContains(searchText) ||
-            $0.symbol.localizedCaseInsensitiveContains(searchText)
+        let baseItems = if searchText.isEmpty {
+            allItems
+        } else {
+            allItems.filter {
+                $0.name.localizedCaseInsensitiveContains(searchText) ||
+                $0.symbol.localizedCaseInsensitiveContains(searchText)
+            }
+        }
+
+        return baseItems.sorted { lhs, rhs in
+            let order = comparisonResult(lhs, rhs)
+
+            if order == .orderedSame { return lhs.id < rhs.id }
+            return sortAscending ? order == .orderedAscending : order == .orderedDescending
+        }
+    }
+
+    private var activeSortLabel: String {
+        "\(sortField.title) \(sortAscending ? "ascending" : "descending")"
+    }
+
+    private func sortButton(_ field: MarketSortField) -> some View {
+        Button {
+            if sortField == field {
+                sortAscending.toggle()
+            } else {
+                sortField = field
+                sortAscending = field.defaultAscending
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Text(field.title)
+                if sortField == field {
+                    Image(systemName: sortAscending ? "chevron.up" : "chevron.down")
+                        .font(.caption2.weight(.bold))
+                }
+            }
+            .font(.caption.weight(sortField == field ? .semibold : .medium))
+            .foregroundStyle(sortField == field ? Color.white : .secondary)
+            .frame(maxWidth: .infinity, alignment: field.alignment)
+            .padding(.vertical, 6)
+            .padding(.horizontal, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(sortField == field ? Color.white.opacity(0.08) : Color.clear)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func comparisonResult(_ lhs: MarketItem, _ rhs: MarketItem) -> ComparisonResult {
+        switch sortField {
+        case .symbol:
+            return lhs.symbol.localizedStandardCompare(rhs.symbol)
+        case .name:
+            return lhs.name.localizedStandardCompare(rhs.name)
+        case .price:
+            if lhs.price == rhs.price {
+                return lhs.symbol.localizedStandardCompare(rhs.symbol)
+            }
+            return lhs.price < rhs.price ? .orderedAscending : .orderedDescending
+        case .pe:
+            let lhsPE = lhs.peRatio ?? (sortAscending ? .infinity : -.infinity)
+            let rhsPE = rhs.peRatio ?? (sortAscending ? .infinity : -.infinity)
+            if lhsPE == rhsPE {
+                return lhs.symbol.localizedStandardCompare(rhs.symbol)
+            }
+            return lhsPE < rhsPE ? .orderedAscending : .orderedDescending
+        case .marketCap:
+            let lhsCap = lhs.marketCap ?? (sortAscending ? .infinity : -.infinity)
+            let rhsCap = rhs.marketCap ?? (sortAscending ? .infinity : -.infinity)
+            if lhsCap == rhsCap {
+                return lhs.symbol.localizedStandardCompare(rhs.symbol)
+            }
+            return lhsCap < rhsCap ? .orderedAscending : .orderedDescending
+        case .change:
+            if lhs.changePercent == rhs.changePercent {
+                return lhs.symbol.localizedStandardCompare(rhs.symbol)
+            }
+            return lhs.changePercent < rhs.changePercent ? .orderedAscending : .orderedDescending
         }
     }
 
@@ -111,6 +192,31 @@ struct MarketsView: View {
                         .padding(.horizontal)
                         .padding(.bottom, 8)
 
+                    HStack(spacing: 10) {
+                        sortButton(.symbol)
+                            .frame(maxWidth: 140, alignment: .leading)
+                        sortButton(.name)
+                        sortButton(.price)
+                            .frame(maxWidth: 120, alignment: .trailing)
+                        sortButton(.pe)
+                            .frame(maxWidth: 90, alignment: .trailing)
+                        sortButton(.marketCap)
+                            .frame(maxWidth: 120, alignment: .trailing)
+                        sortButton(.change)
+                            .frame(maxWidth: 120, alignment: .trailing)
+                    }
+                    .padding(.horizontal)
+                    .padding(.bottom, 6)
+
+                    HStack {
+                        Text("Sorted by \(activeSortLabel)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                    }
+                    .padding(.horizontal)
+                    .padding(.bottom, 6)
+
                     Table(filteredItems) {
                         TableColumn("Symbol") { item in
                             HStack(spacing: 6) {
@@ -149,6 +255,20 @@ struct MarketsView: View {
                                 .font(.body.monospacedDigit())
                         }
                         .width(min: 80, ideal: 100)
+
+                        TableColumn("P/E") { item in
+                            Text(item.formattedPERatio)
+                                .font(.caption.monospacedDigit())
+                                .foregroundStyle(item.peRatio == nil ? .secondary : .primary)
+                        }
+                        .width(min: 70, ideal: 80)
+
+                        TableColumn("Mkt Cap") { item in
+                            Text(item.formattedMarketCap)
+                                .font(.caption.monospacedDigit())
+                                .foregroundStyle(item.marketCap == nil ? .secondary : .primary)
+                        }
+                        .width(min: 90, ideal: 110)
 
                         TableColumn("Change") { item in
                             Text(String(format: "%@%.2f%%", item.changePercent >= 0 ? "+" : "", item.changePercent))
@@ -221,11 +341,47 @@ private extension MarketsView {
     }
 }
 
+private enum MarketSortField {
+    case symbol
+    case name
+    case price
+    case pe
+    case marketCap
+    case change
+
+    var title: String {
+        switch self {
+        case .symbol: return "Symbol"
+        case .name: return "Name"
+        case .price: return "Price"
+        case .pe: return "P/E"
+        case .marketCap: return "Mkt Cap"
+        case .change: return "Change"
+        }
+    }
+
+    var defaultAscending: Bool {
+        switch self {
+        case .symbol, .name: return true
+        case .price, .pe, .marketCap, .change: return false
+        }
+    }
+
+    var alignment: Alignment {
+        switch self {
+        case .symbol, .name: return .leading
+        case .price, .pe, .marketCap, .change: return .trailing
+        }
+    }
+}
+
 private struct MarketItem: Identifiable {
     let name: String
     let symbol: String
     let price: Double
     let changePercent: Double
+    let marketCap: Double?
+    let peRatio: Double?
     let kind: Kind
 
     var id: String {
@@ -240,5 +396,22 @@ private struct MarketItem: Identifiable {
         case stock(Stock)
         case commodity
         case crypto
+    }
+
+    var formattedMarketCap: String {
+        guard let marketCap, marketCap > 0 else { return "N/A" }
+        if marketCap >= 1_000_000_000_000 {
+            return String(format: "$%.2fT", marketCap / 1_000_000_000_000)
+        } else if marketCap >= 1_000_000_000 {
+            return String(format: "$%.1fB", marketCap / 1_000_000_000)
+        } else if marketCap >= 1_000_000 {
+            return String(format: "$%.0fM", marketCap / 1_000_000)
+        }
+        return String(format: "$%.0f", marketCap)
+    }
+
+    var formattedPERatio: String {
+        guard let peRatio, peRatio > 0 else { return "N/A" }
+        return String(format: "%.1f", peRatio)
     }
 }

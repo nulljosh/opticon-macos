@@ -9,7 +9,7 @@ Native macOS companion for Opticon. Bottom tab shell, table-heavy market views, 
 - `API/OpticonAPI.swift` -- all backend requests (shared with iOS)
 - `Models/AppState.swift` -- @Observable shared state
 - `Views/SituationView.swift` -- full-window map view (MapKit), viewport reloads, source toggles
-- `Views/MarketsView.swift` -- table layout for stocks/commodities/crypto
+- `Views/MarketsView.swift` -- sortable table layout for stocks/commodities/crypto with search, P/E, and market cap
 - `Views/TickerBarView.swift` -- bounded top ticker used by Markets
 - `Views/PortfolioView.swift` -- spending forecast (Charts), holdings, budget, debt, goals, statements
 - `Views/SettingsView.swift` -- account, subscription, map source toggles, change email/password, delete
@@ -33,6 +33,7 @@ xcodebuild -project Opticon.xcodeproj -scheme Opticon -destination 'platform=mac
 - Touch ID works via LocalAuthentication framework (same as iOS)
 - Backend is identical to iOS -- same API, same models
 - Markets layout must stay width-bounded; avoid intrinsic-width views that can resize the macOS window
+- Markets sorting is part of the primary interaction model now; preserve clickable sort controls for symbol, name, price, P/E, market cap, and change
 - Map data sources are user-toggleable in Settings and should be respected by `SituationView`
 
 ## Testing

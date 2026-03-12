@@ -30,6 +30,8 @@ struct Stock: Decodable, Identifiable, Hashable {
     let volume: Double
     let high52: Double
     let low52: Double
+    let marketCap: Double?
+    let peRatio: Double?
 
     var id: String { symbol }
 
@@ -44,6 +46,23 @@ struct Stock: Decodable, Identifiable, Hashable {
         return String(format: "%.0f", volume)
     }
 
+    var formattedMarketCap: String {
+        guard let marketCap, marketCap > 0 else { return "N/A" }
+        if marketCap >= 1_000_000_000_000 {
+            return String(format: "$%.2fT", marketCap / 1_000_000_000_000)
+        } else if marketCap >= 1_000_000_000 {
+            return String(format: "$%.1fB", marketCap / 1_000_000_000)
+        } else if marketCap >= 1_000_000 {
+            return String(format: "$%.0fM", marketCap / 1_000_000)
+        }
+        return String(format: "$%.0f", marketCap)
+    }
+
+    var formattedPERatio: String {
+        guard let peRatio, peRatio > 0 else { return "N/A" }
+        return String(format: "%.1f", peRatio)
+    }
+
     enum CodingKeys: String, CodingKey {
         case symbol, name, price, change, volume
         case changePercent = "changesPercentage"
@@ -52,6 +71,13 @@ struct Stock: Decodable, Identifiable, Hashable {
         case regularMarketChangePercent
         case high52 = "yearHigh"
         case low52 = "yearLow"
+        case marketCap
+        case marketCapSnake = "market_cap"
+        case marketCapitalization
+        case pe
+        case peRatio
+        case trailingPE
+        case priceEarningsRatio
     }
 
     init(from decoder: Decoder) throws {
@@ -74,10 +100,18 @@ struct Stock: Decodable, Identifiable, Hashable {
         volume = container.flexibleDouble(forKey: .volume) ?? 0
         high52 = container.flexibleDouble(forKey: .high52) ?? 0
         low52 = container.flexibleDouble(forKey: .low52) ?? 0
+        marketCap = container.flexibleDouble(forKey: .marketCap)
+            ?? container.flexibleDouble(forKey: .marketCapSnake)
+            ?? container.flexibleDouble(forKey: .marketCapitalization)
+        peRatio = container.flexibleDouble(forKey: .pe)
+            ?? container.flexibleDouble(forKey: .peRatio)
+            ?? container.flexibleDouble(forKey: .trailingPE)
+            ?? container.flexibleDouble(forKey: .priceEarningsRatio)
     }
 
     init(symbol: String, name: String, price: Double, change: Double = 0,
-         changePercent: Double = 0, volume: Double = 0, high52: Double = 0, low52: Double = 0) {
+         changePercent: Double = 0, volume: Double = 0, high52: Double = 0, low52: Double = 0,
+         marketCap: Double? = nil, peRatio: Double? = nil) {
         self.symbol = symbol
         self.name = name
         self.price = price
@@ -86,5 +120,7 @@ struct Stock: Decodable, Identifiable, Hashable {
         self.volume = volume
         self.high52 = high52
         self.low52 = low52
+        self.marketCap = marketCap
+        self.peRatio = peRatio
     }
 }

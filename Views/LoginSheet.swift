@@ -137,6 +137,14 @@ struct LoginSheet: View {
             }
             .onAppear {
                 biometryType = appState.biometricBiometryType()
+                if let saved = appState.savedCredentials {
+                    if email.isEmpty {
+                        email = saved.email
+                    }
+                    if password.isEmpty {
+                        password = saved.password
+                    }
+                }
             }
         }
     }
@@ -150,9 +158,6 @@ struct LoginSheet: View {
                 await appState.register(email: email, password: password)
             } else {
                 await appState.login(email: email, password: password)
-            }
-            if appState.error == nil {
-                appState.saveBiometricCredentials(email: email, password: password)
             }
             error = appState.error
         }

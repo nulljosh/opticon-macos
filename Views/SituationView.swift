@@ -2,56 +2,18 @@ import MapKit
 import SwiftUI
 
 struct SituationView: View {
-    private enum City: String, CaseIterable, Identifiable {
-        case vancouver = "Vancouver"
-        case nyc = "NYC"
-        case london = "London"
-        case tokyo = "Tokyo"
+    @Environment(AppState.self) private var appState
 
-        var id: String { rawValue }
-
-        var apiValue: String {
-            switch self {
-            case .vancouver: return "vancouver"
-            case .nyc: return "nyc"
-            case .london: return "london"
-            case .tokyo: return "tokyo"
-            }
-        }
-
-        var region: MKCoordinateRegion {
-            switch self {
-            case .vancouver:
-                return MKCoordinateRegion(
-                    center: CLLocationCoordinate2D(latitude: 49.2827, longitude: -123.1207),
-                    span: MKCoordinateSpan(latitudeDelta: 2.2, longitudeDelta: 2.2)
-                )
-            case .nyc:
-                return MKCoordinateRegion(
-                    center: CLLocationCoordinate2D(latitude: 40.7128, longitude: -74.0060),
-                    span: MKCoordinateSpan(latitudeDelta: 2.2, longitudeDelta: 2.2)
-                )
-            case .london:
-                return MKCoordinateRegion(
-                    center: CLLocationCoordinate2D(latitude: 51.5072, longitude: -0.1276),
-                    span: MKCoordinateSpan(latitudeDelta: 2.2, longitudeDelta: 2.2)
-                )
-            case .tokyo:
-                return MKCoordinateRegion(
-                    center: CLLocationCoordinate2D(latitude: 35.6764, longitude: 139.6500),
-                    span: MKCoordinateSpan(latitudeDelta: 2.2, longitudeDelta: 2.2)
-                )
-            }
-        }
-    }
-
-    @State private var selectedCity: City = .vancouver
-    @State private var mapPosition = MapCameraPosition.region(
-        MKCoordinateRegion(
-            center: CLLocationCoordinate2D(latitude: 49.2827, longitude: -123.1207),
-            span: MKCoordinateSpan(latitudeDelta: 2.2, longitudeDelta: 2.2)
-        )
+    private static let defaultRegion = MKCoordinateRegion(
+        center: CLLocationCoordinate2D(latitude: 49.1044, longitude: -122.6605),
+        span: MKCoordinateSpan(latitudeDelta: 2.2, longitudeDelta: 2.2)
     )
+
+    @StateObject private var locationManager = LocationManager()
+    @State private var mapPosition = MapCameraPosition.region(
+        SituationView.defaultRegion
+    )
+    @State private var visibleRegion = SituationView.defaultRegion
 
     @State private var earthquakes: [Earthquake] = []
     @State private var flights: [Flight] = []
@@ -64,137 +26,95 @@ struct SituationView: View {
     @State private var selectedEvent: MapEventDetail?
 
     var body: some View {
-        ZStack {
-            mapView
-
-            VStack(spacing: 0) {
-                headerOverlay
-                Spacer()
-            }
-        }
+        mapView
         .onAppear {
             guard !hasLoaded else { return }
             hasLoaded = true
             restoreSnapshot()
+            locationManager.requestLocation()
             Task {
                 await Task.yield()
-                await loadData(for: selectedCity)
+                await loadData(for: visibleRegion)
             }
         }
-        .onChange(of: selectedCity) { _, newValue in
-            mapPosition = .region(newValue.region)
+        .onChange(of: locationManager.currentLocation) { _, location in
+            guard let location else { return }
+            let region = MKCoordinateRegion(
+                center: location.coordinate,
+                span: MKCoordinateSpan(latitudeDelta: 1.4, longitudeDelta: 1.4)
+            )
+            visibleRegion = region
+            mapPosition = .region(region)
             Task {
-                await loadData(for: newValue)
+                await loadData(for: region)
+            }
+        }
+        .onMapCameraChange(frequency: .onEnd) { context in
+            let region = context.region
+            visibleRegion = region
+            Task {
+                await loadData(for: region)
             }
         }
         .sheet(item: $selectedEvent) { event in
             SituationEventDetailView(event: event)
                 .frame(minWidth: 400, minHeight: 300)
         }
-    }
-
-    private var headerOverlay: some View {
-        VStack(spacing: 10) {
-            VStack(spacing: 10) {
-                HStack(alignment: .top) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(selectedCity == .vancouver ? "Current Location" : selectedCity.rawValue)
-                            .font(.headline.weight(.semibold))
-                            .foregroundStyle(.white)
-                        Text(selectedCitySubtitle)
-                            .font(.caption)
-                            .foregroundStyle(.white.opacity(0.72))
-                    }
-
-                    Spacer()
-
-                    Picker("Location", selection: $selectedCity) {
-                        ForEach(City.allCases) { city in
-                            Text(city.rawValue).tag(city)
-                        }
-                    }
-                    .pickerStyle(.menu)
-                    .frame(width: 140)
-                }
-
-                HStack(spacing: 8) {
-                    statusChip(title: "\(earthquakes.count) quakes", color: .red)
-                    statusChip(title: "\(incidents.count) incidents", color: Color(hex: "ffbf00"))
-                    if !weatherAlerts.isEmpty {
-                        statusChip(title: "\(weatherAlerts.count) alerts", color: Color(hex: "34c759"))
-                    }
-                    if let flightStatusMessage {
-                        statusChip(title: flightStatusMessage, color: .secondary)
-                    } else {
-                        statusChip(title: "\(flights.count) flights", color: .cyan)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .padding(12)
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18))
-            .overlay {
-                RoundedRectangle(cornerRadius: 18)
-                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
-            }
-            .shadow(color: .black.opacity(0.18), radius: 12, y: 3)
+        .onChange(of: appState.situationEarthquakesEnabled) { _, _ in
+            Task { await loadData(for: visibleRegion) }
         }
-        .padding(.horizontal)
-        .padding(.top, 12)
-    }
-
-    private var selectedCitySubtitle: String {
-        switch selectedCity {
-        case .vancouver:
-            return "Primary live view"
-        default:
-            return "Secondary watch location"
+        .onChange(of: appState.situationFlightsEnabled) { _, _ in
+            Task { await loadData(for: visibleRegion) }
         }
-    }
-
-    private func statusChip(title: String, color: Color) -> some View {
-        Text(title)
-            .font(.caption.weight(.semibold))
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(color.opacity(0.16), in: Capsule())
-            .overlay {
-                Capsule()
-                    .stroke(color.opacity(0.3), lineWidth: 1)
-            }
-            .foregroundStyle(.white)
+        .onChange(of: appState.situationIncidentsEnabled) { _, _ in
+            Task { await loadData(for: visibleRegion) }
+        }
+        .onChange(of: appState.situationWeatherEnabled) { _, _ in
+            Task { await loadData(for: visibleRegion) }
+        }
     }
 
     private var mapView: some View {
         Map(position: $mapPosition) {
-            ForEach(earthquakes) { quake in
+            if let currentLocation = locationManager.currentLocation {
+                Annotation("Current Location", coordinate: currentLocation.coordinate) {
+                    mapPin(
+                        color: Color(hex: "ff453a"),
+                        emoji: "📍",
+                        size: 25,
+                        padding: 0
+                    )
+                }
+            }
+
+            ForEach(appState.situationEarthquakesEnabled ? earthquakes : []) { quake in
                 Annotation(quake.title, coordinate: quake.coordinate) {
                     Button {
                         selectedEvent = .earthquake(quake)
                     } label: {
-                        mapPin(color: .red, systemImage: "waveform.path.ecg")
+                        mapPin(color: .red, emoji: "🌋", size: 15)
                     }
                     .buttonStyle(.plain)
                 }
             }
 
-            ForEach(flights) { flight in
+            ForEach(appState.situationFlightsEnabled ? flights : []) { flight in
                 Annotation(flight.callsign, coordinate: flight.coordinate) {
                     Button {
                         selectedEvent = .flight(flight)
                     } label: {
-                        mapPin(color: .cyan, systemImage: "airplane")
+                        mapPin(color: .cyan, emoji: "✈️", size: 15)
                     }
                     .buttonStyle(.plain)
                 }
             }
 
-            ForEach(incidents) { incident in
+            ForEach(appState.situationIncidentsEnabled ? incidents : []) { incident in
                 Annotation(incident.title, coordinate: incident.coordinate) {
                     Button {
                         selectedEvent = .incident(incident)
                     } label: {
-                        mapPin(color: Color(hex: "ffbf00"), systemImage: "exclamationmark.triangle.fill")
+                        mapPin(color: Color(hex: "4da3ff"), emoji: "🚧", size: 15)
                     }
                     .buttonStyle(.plain)
                 }
@@ -203,41 +123,34 @@ struct SituationView: View {
         .mapStyle(.standard(elevation: .realistic))
     }
 
-    private func mapPin(color: Color, systemImage: String) -> some View {
-        Image(systemName: systemImage)
-            .font(.caption.weight(.bold))
-            .foregroundStyle(.white)
-            .padding(8)
-            .background(color, in: Circle())
-            .overlay {
-                Circle()
-                    .stroke(.white.opacity(0.35), lineWidth: 1)
-            }
+    private func mapPin(
+        color: Color,
+        emoji: String,
+        size: CGFloat = 12,
+        padding: CGFloat = 8
+    ) -> some View {
+        Text(emoji)
+            .font(.system(size: size))
+            .padding(padding)
             .shadow(color: .black.opacity(0.25), radius: 6, y: 2)
     }
 
-    private func loadData(for city: City) async {
+    private func loadData(for region: MKCoordinateRegion) async {
         error = nil
         flightStatusMessage = nil
         defer { saveSnapshot() }
 
-        let center = city.region.center
-        let span = city.region.span
+        let center = region.center
+        let span = region.span
         let lamin = center.latitude - span.latitudeDelta / 2
         let lamax = center.latitude + span.latitudeDelta / 2
         let lomin = center.longitude - span.longitudeDelta / 2
         let lomax = center.longitude + span.longitudeDelta / 2
 
-        async let earthquakeLoad = loadSection(label: "Earthquakes") {
-            try await OpticonAPI.shared.fetchEarthquakes()
-        }
-        async let flightLoad = loadFlights(lamin: lamin, lomin: lomin, lamax: lamax, lomax: lomax)
-        async let incidentLoad = loadSection(label: "Incidents") {
-            try await OpticonAPI.shared.fetchIncidents(lat: center.latitude, lon: center.longitude)
-        }
-        async let weatherLoad = loadSection(label: "Weather") {
-            try await OpticonAPI.shared.fetchWeatherAlerts(lat: center.latitude, lon: center.longitude)
-        }
+        async let earthquakeLoad = loadEarthquakesIfEnabled()
+        async let flightLoad = loadFlightsIfEnabled(lamin: lamin, lomin: lomin, lamax: lamax, lomax: lomax)
+        async let incidentLoad = loadIncidentsIfEnabled(lat: center.latitude, lon: center.longitude)
+        async let weatherLoad = loadWeatherIfEnabled(lat: center.latitude, lon: center.longitude)
 
         let earthquakeResult = await earthquakeLoad
         let flightResult = await flightLoad
@@ -272,12 +185,59 @@ struct SituationView: View {
         lamin: Double, lomin: Double, lamax: Double, lomax: Double
     ) async -> (value: [Flight], error: String?) {
         do {
-            let flights = try await OpticonAPI.shared.fetchFlights(
+            let feed = try await OpticonAPI.shared.fetchFlights(
                 lamin: lamin, lomin: lomin, lamax: lamax, lomax: lomax
             )
-            return (flights, nil)
+            let status = (feed.meta?.status ?? "").lowercased()
+            let message: String? = {
+                if feed.meta?.degraded == true && feed.states.isEmpty {
+                    return "Flights degraded"
+                }
+                if status == "stale" || status == "cache" || feed.meta?.cached == true {
+                    return "\(feed.states.count) cached flights"
+                }
+                if feed.states.isEmpty {
+                    return "0 flights"
+                }
+                return nil
+            }()
+            return (feed.states, message)
         } catch {
-            return ([], "Flights unavailable")
+            return ([], "Flights degraded")
+        }
+    }
+
+    private func loadEarthquakesIfEnabled() async -> (value: [Earthquake], error: String?) {
+        guard appState.situationEarthquakesEnabled else { return ([], nil) }
+        return await loadSection(label: "Earthquakes") {
+            try await OpticonAPI.shared.fetchEarthquakes()
+        }
+    }
+
+    private func loadFlightsIfEnabled(
+        lamin: Double, lomin: Double, lamax: Double, lomax: Double
+    ) async -> (value: [Flight], error: String?) {
+        guard appState.situationFlightsEnabled else { return ([], nil) }
+        return await loadFlights(lamin: lamin, lomin: lomin, lamax: lamax, lomax: lomax)
+    }
+
+    private func loadIncidentsIfEnabled(
+        lat: Double,
+        lon: Double
+    ) async -> (value: [Incident], error: String?) {
+        guard appState.situationIncidentsEnabled else { return ([], nil) }
+        return await loadSection(label: "Incidents") {
+            try await OpticonAPI.shared.fetchIncidents(lat: lat, lon: lon)
+        }
+    }
+
+    private func loadWeatherIfEnabled(
+        lat: Double,
+        lon: Double
+    ) async -> (value: [WeatherAlert], error: String?) {
+        guard appState.situationWeatherEnabled else { return ([], nil) }
+        return await loadSection(label: "Weather") {
+            try await OpticonAPI.shared.fetchWeatherAlerts(lat: lat, lon: lon)
         }
     }
 
@@ -295,17 +255,15 @@ struct SituationView: View {
         guard let data = UserDefaults.standard.data(forKey: snapshotKey),
               let snapshot = try? JSONDecoder().decode(SituationSnapshot.self, from: data)
         else {
-            mapPosition = .region(selectedCity.region)
+            mapPosition = .region(visibleRegion)
             return
         }
 
-        if let city = City(rawValue: snapshot.selectedCity) {
-            selectedCity = city
-            mapPosition = .region(city.region)
-        } else {
-            mapPosition = .region(selectedCity.region)
-        }
-
+        visibleRegion = MKCoordinateRegion(
+            center: CLLocationCoordinate2D(latitude: snapshot.centerLatitude, longitude: snapshot.centerLongitude),
+            span: MKCoordinateSpan(latitudeDelta: snapshot.latitudeDelta, longitudeDelta: snapshot.longitudeDelta)
+        )
+        mapPosition = .region(visibleRegion)
         earthquakes = snapshot.earthquakes.map { $0.model }
         flights = snapshot.flights.map { $0.model }
         incidents = snapshot.incidents.map { $0.model }
@@ -315,7 +273,10 @@ struct SituationView: View {
 
     private func saveSnapshot() {
         let snapshot = SituationSnapshot(
-            selectedCity: selectedCity.rawValue,
+            centerLatitude: visibleRegion.center.latitude,
+            centerLongitude: visibleRegion.center.longitude,
+            latitudeDelta: visibleRegion.span.latitudeDelta,
+            longitudeDelta: visibleRegion.span.longitudeDelta,
             earthquakes: earthquakes.map(SnapshotEarthquake.init),
             flights: flights.map(SnapshotFlight.init),
             incidents: incidents.map(SnapshotIncident.init),
@@ -424,7 +385,10 @@ private struct SituationEventDetailView: View {
 }
 
 private struct SituationSnapshot: Codable {
-    let selectedCity: String
+    let centerLatitude: Double
+    let centerLongitude: Double
+    let latitudeDelta: Double
+    let longitudeDelta: Double
     let earthquakes: [SnapshotEarthquake]
     let flights: [SnapshotFlight]
     let incidents: [SnapshotIncident]

@@ -2,11 +2,11 @@ import SwiftUI
 
 struct ContentView: View {
     @Environment(AppState.self) private var appState
-    @State private var selectedSection: SidebarSection = .situation
+    @State private var selectedSection: AppSection = .situation
     @State private var tickerSelectedStock: Stock?
 
-    enum SidebarSection: String, CaseIterable, Identifiable {
-        case situation = "Situation"
+    enum AppSection: String, CaseIterable, Identifiable {
+        case situation = "Map"
         case markets = "Markets"
         case predictions = "Predictions"
         case portfolio = "Portfolio"
@@ -28,26 +28,31 @@ struct ContentView: View {
     var body: some View {
         @Bindable var appState = appState
 
-        NavigationSplitView {
-            List(SidebarSection.allCases, selection: $selectedSection) { section in
-                Label(section.rawValue, systemImage: section.icon)
-                    .tag(section)
-            }
-            .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 260)
-        } detail: {
-            detailView
-                .frame(minWidth: 700, minHeight: 500)
-        }
-        .navigationTitle(selectedSection.rawValue)
-        .toolbar {
-            if selectedSection == .markets {
-                ToolbarItem(placement: .automatic) {
-                    TickerToolbarView(appState: appState) { stock in
+        ZStack {
+            VStack(spacing: 0) {
+                if selectedSection == .markets {
+                    TickerBarView(appState: appState) { stock in
                         tickerSelectedStock = stock
                     }
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 10)
+                    .padding(.bottom, 4)
                 }
+
+                detailView
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            BottomTabBar(selectedSection: $selectedSection)
+                .padding(.horizontal, 24)
+                .padding(.top, 8)
+                .padding(.bottom, 12)
+                .frame(maxWidth: .infinity)
+        }
+        .navigationTitle(selectedSection.rawValue)
         .sheet(item: $tickerSelectedStock) { stock in
             StockDetailView(stock: stock)
                 .environment(appState)
@@ -85,6 +90,82 @@ struct ContentView: View {
     }
 }
 
+private struct BottomTabBar: View {
+    @Binding var selectedSection: ContentView.AppSection
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(ContentView.AppSection.allCases) { section in
+                tabCell(for: section)
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 8)
+        .frame(maxWidth: 760)
+        .frame(height: 64)
+        .background(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(.ultraThinMaterial)
+                .allowsHitTesting(false)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(Color.white.opacity(0.04))
+                .allowsHitTesting(false)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                        .allowsHitTesting(false)
+                )
+        )
+        .shadow(color: .black.opacity(0.16), radius: 14, y: 4)
+    }
+
+    private func isSelected(_ section: ContentView.AppSection) -> Bool {
+        selectedSection == section
+    }
+
+    private func tabCell(for section: ContentView.AppSection) -> some View {
+        let selected = isSelected(section)
+
+        return VStack(spacing: 3) {
+            Image(systemName: section.icon)
+                .font(.system(size: 14, weight: .semibold))
+            Text(section.rawValue)
+                .font(.system(size: 10, weight: .semibold))
+                .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity, minHeight: 44)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .foregroundStyle(selected ? .white : Color.white.opacity(0.64))
+        .background(tabBackground(selected: selected))
+        .overlay(tabBorder(selected: selected))
+        .contentShape(Rectangle())
+        .onTapGesture {
+            selectedSection = section
+        }
+    }
+
+    private func tabBackground(selected: Bool) -> some View {
+        RoundedRectangle(cornerRadius: 14, style: .continuous)
+            .fill(selected ? AnyShapeStyle(selectedGradient) : AnyShapeStyle(Color.clear))
+    }
+
+    private func tabBorder(selected: Bool) -> some View {
+        RoundedRectangle(cornerRadius: 14, style: .continuous)
+            .stroke(Color.white.opacity(selected ? 0.14 : 0), lineWidth: 1)
+    }
+
+    private var selectedGradient: LinearGradient {
+        LinearGradient(
+            colors: [Color(hex: "0a84ff"), Color(hex: "5ac8fa")],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+}
+
 private struct SharedErrorBanner: View {
     let message: String
     let onDismiss: () -> Void
@@ -105,29 +186,5 @@ private struct SharedErrorBanner: View {
         .background(.ultraThinMaterial, in: Capsule())
         .padding(.horizontal)
         .shadow(radius: 8, y: 2)
-    }
-}
-
-struct TickerToolbarView: View {
-    let appState: AppState
-    var onSelectStock: ((Stock) -> Void)?
-
-    var body: some View {
-        HStack(spacing: 12) {
-            ForEach(appState.stocks.prefix(8)) { stock in
-                Button {
-                    onSelectStock?(stock)
-                } label: {
-                    HStack(spacing: 4) {
-                        Text(stock.symbol)
-                            .font(.caption.weight(.semibold))
-                        Text(String(format: "$%.2f", stock.price))
-                            .font(.caption.monospacedDigit())
-                            .foregroundStyle(stock.change >= 0 ? Color(hex: "34c759") : Color(hex: "ff3b30"))
-                    }
-                }
-                .buttonStyle(.plain)
-            }
-        }
     }
 }

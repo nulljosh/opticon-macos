@@ -4,66 +4,30 @@ struct TickerBarView: View {
     let appState: AppState
     var onSelectStock: ((Stock) -> Void)? = nil
 
-    @State private var contentWidth: CGFloat = 0
-    @State private var cachedLoopingStocks: [Stock] = []
-
-    private let itemSpacing: CGFloat = 18
-    private let scrollSpeed: CGFloat = 30
-
-    var body: some View {
-        Group {
-            if cachedLoopingStocks.isEmpty {
-                EmptyView()
-            } else {
-                TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
-                    let offset = scrollOffset(at: context.date)
-                    HStack(spacing: itemSpacing) {
-                        ForEach(Array(cachedLoopingStocks.enumerated()), id: \.offset) { _, stock in
-                            Button {
-                                onSelectStock?(stock)
-                            } label: {
-                                TickerItemView(stock: stock)
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                    .padding(.horizontal, 12)
-                    .fixedSize()
-                    .background {
-                        GeometryReader { proxy in
-                            Color.clear
-                                .onAppear {
-                                    contentWidth = (proxy.size.width + itemSpacing) / 2
-                                }
-                                .onChange(of: proxy.size.width) { _, newWidth in
-                                    contentWidth = (newWidth + itemSpacing) / 2
-                                }
-                        }
-                    }
-                    .offset(x: -offset)
-                }
-                .frame(height: 32)
-                .clipped()
-                .background(.thinMaterial)
-                .overlay(alignment: .bottom) {
-                    Divider()
-                }
-            }
-        }
-        .onChange(of: appState.stocks) { _, newStocks in
-            cachedLoopingStocks = newStocks + newStocks
-        }
-        .onAppear {
-            if !appState.stocks.isEmpty {
-                cachedLoopingStocks = appState.stocks + appState.stocks
-            }
-        }
+    private var visibleStocks: [Stock] {
+        Array(appState.stocks.prefix(12))
     }
 
-    private func scrollOffset(at date: Date) -> CGFloat {
-        guard contentWidth > 1 else { return 0 }
-        let distance = CGFloat(date.timeIntervalSinceReferenceDate) * scrollSpeed
-        return distance.truncatingRemainder(dividingBy: contentWidth)
+    var body: some View {
+        HStack(spacing: 18) {
+            ForEach(visibleStocks) { stock in
+                Button {
+                    onSelectStock?(stock)
+                } label: {
+                    TickerItemView(stock: stock)
+                }
+                .buttonStyle(.plain)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 12)
+        .frame(maxWidth: .infinity)
+        .frame(height: 32)
+        .background(.thinMaterial)
+        .overlay(alignment: .bottom) {
+            Divider()
+        }
+        .clipped()
     }
 }
 

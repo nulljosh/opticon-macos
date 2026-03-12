@@ -49,6 +49,27 @@ struct PortfolioView: View {
         selectedActualSpendingMonth?.total ?? selectedForecastPoint?.median
     }
 
+    private var nextMonthDeltaText: String? {
+        guard let forecast = spendingForecast,
+              let lastActual = spendingMonths.last?.total
+        else { return nil }
+
+        let delta = forecast.summary.expectedNextMonth - lastActual
+        let direction = delta >= 0 ? "+" : "-"
+        let magnitude = abs(delta)
+        let percent = lastActual == 0 ? 0 : (delta / lastActual) * 100
+        let amountText = formattedCurrency(magnitude)
+        let percentText = String(format: "%.1f", abs(percent))
+        return "\(direction)\(amountText) (\(direction)\(percentText)%) vs latest"
+    }
+
+    private var topSpendingDriverText: String? {
+        guard let latest = spendingMonths.last,
+              let topCategory = latest.sortedCategories.first
+        else { return nil }
+        return "\(topCategory.key.capitalized) is the largest recent category"
+    }
+
     private var resolvedPortfolio: Portfolio? {
         appState.portfolio ?? appState.financeData.map { Portfolio(financeData: $0, stocks: appState.stocks) }
     }
@@ -485,28 +506,45 @@ struct PortfolioView: View {
     ) -> some View {
         let yDomain = spendingChartDomain(months: months, forecast: forecast)
         let axisMonths = xAxisMonthLabels(months: months, forecast: forecast)
+        let forecastStartMonth = forecast?.points.first?.month
 
         return VStack(alignment: HorizontalAlignment.leading, spacing: 12) {
-            Text("Spending Forecast")
-                .font(.headline)
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Spending Forecast")
+                    .font(.headline)
 
-            if let forecast {
-                VStack(alignment: HorizontalAlignment.leading, spacing: 6) {
+                if let forecast {
                     Text(
                         "Next month expected: \(forecast.summary.expectedNextMonth, format: .currency(code: currencyCode))"
                     )
                     .font(.subheadline.weight(.semibold))
 
-                    Text(
-                        "Range: \(forecast.summary.rangeLow, format: .currency(code: currencyCode)) - \(forecast.summary.rangeHigh, format: .currency(code: currencyCode))"
-                    )
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    HStack(spacing: 8) {
+                        if let nextMonthDeltaText {
+                            insightChip(
+                                title: "Delta",
+                                value: nextMonthDeltaText,
+                                tone: .blue
+                            )
+                        }
+
+                        insightChip(
+                            title: "Confidence Range",
+                            value: "\(formattedCurrency(forecast.summary.rangeLow)) - \(formattedCurrency(forecast.summary.rangeHigh))",
+                            tone: .green
+                        )
+                    }
+
+                    if let topSpendingDriverText {
+                        Text(topSpendingDriverText)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                } else {
+                    Text("Add at least 3 months of reports to generate a forecast.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
-            } else {
-                Text("Add at least 3 months of reports to generate a forecast.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
 
             Chart {
@@ -550,6 +588,19 @@ struct PortfolioView: View {
                         .lineStyle(StrokeStyle(lineWidth: 2, dash: [6, 4]))
                         .interpolationMethod(.catmullRom)
                     }
+                }
+
+                if let forecastStartMonth {
+                    RuleMark(x: .value("Forecast Starts", forecastStartMonth))
+                        .foregroundStyle(Color.white.opacity(0.22))
+                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 5]))
+                        .annotation(position: .top, alignment: .trailing) {
+                            Text("Forecast")
+                                .font(.caption2.weight(.semibold))
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(Color.white.opacity(0.08), in: Capsule())
+                        }
                 }
 
                 if let selectedSpendingMonth {
@@ -598,24 +649,9 @@ struct PortfolioView: View {
             .chartOverlay { proxy in
                 spendingChartOverlay(proxy: proxy)
             }
-
-            spendingXAxisLabels(months: axisMonths)
         }
         .padding(14)
         .background(Color.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 16))
-    }
-
-    private func spendingXAxisLabels(months: [String]) -> some View {
-        HStack(alignment: .top) {
-            ForEach(months, id: \.self) { month in
-                Text(shortMonthLabel(month))
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity)
-                    .lineLimit(1)
-            }
-        }
-        .padding(.top, 2)
     }
 
     private func spendingChartOverlay(proxy: ChartProxy) -> some View {
@@ -628,6 +664,18 @@ struct PortfolioView: View {
                         .fill(.clear)
                         .contentShape(Rectangle())
                         .gesture(scrubGesture(proxy: proxy, plotFrame: frame))
+                        .onContinuousHover { phase in
+                            switch phase {
+                            case .active(let location):
+                                updateHoverSelection(
+                                    at: location,
+                                    proxy: proxy,
+                                    plotFrame: frame
+                                )
+                            case .ended:
+                                clearSpendingSelection()
+                            }
+                        }
                         .onTapGesture {
                             clearSpendingSelection()
                         }
@@ -662,16 +710,28 @@ struct PortfolioView: View {
     private func scrubGesture(proxy: ChartProxy, plotFrame: CGRect) -> some Gesture {
         DragGesture(minimumDistance: 0)
             .onChanged { value in
-                let xPosition = value.location.x - plotFrame.origin.x
-
-                guard xPosition >= 0,
-                      xPosition <= plotFrame.width,
-                      let month: String = proxy.value(atX: xPosition)
-                else { return }
-
-                updateSelectedSpendingMonth(month)
-                selectedSpendingX = plotFrame.origin.x + xPosition
+                updateHoverSelection(
+                    at: value.location,
+                    proxy: proxy,
+                    plotFrame: plotFrame
+                )
             }
+    }
+
+    private func updateHoverSelection(
+        at location: CGPoint,
+        proxy: ChartProxy,
+        plotFrame: CGRect
+    ) {
+        let xPosition = location.x - plotFrame.origin.x
+
+        guard xPosition >= 0,
+              xPosition <= plotFrame.width,
+              let month: String = proxy.value(atX: xPosition)
+        else { return }
+
+        updateSelectedSpendingMonth(month)
+        selectedSpendingX = plotFrame.origin.x + xPosition
     }
 
     private func updateSelectedSpendingMonth(_ month: String) {
@@ -685,13 +745,29 @@ struct PortfolioView: View {
     }
 
     private func spendingTooltip(month: String, value: Double) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 4) {
             Text(month)
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(.white.opacity(0.72))
-            Text(value, format: .currency(code: currencyCode))
-                .font(.caption.weight(.bold))
-                .foregroundStyle(.white)
+
+            if let actual = selectedActualSpendingMonth, actual.month == month {
+                Text("Actual: \(actual.total, format: .currency(code: currencyCode))")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.white)
+            }
+
+            if let forecastPoint = selectedForecastPoint, forecastPoint.month == month {
+                Text("Forecast: \(forecastPoint.median, format: .currency(code: currencyCode))")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.white)
+                Text("Range: \(forecastPoint.low, format: .currency(code: currencyCode)) - \(forecastPoint.high, format: .currency(code: currencyCode))")
+                    .font(.caption2)
+                    .foregroundStyle(.white.opacity(0.78))
+            } else if selectedActualSpendingMonth == nil {
+                Text(value, format: .currency(code: currencyCode))
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.white)
+            }
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
@@ -754,10 +830,34 @@ struct PortfolioView: View {
         return "\(sign)$\(String(format: "%.0f", absValue))"
     }
 
+    private func formattedCurrency(_ value: Double) -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .currency
+        formatter.currencyCode = currencyCode
+        formatter.maximumFractionDigits = 2
+        formatter.minimumFractionDigits = 2
+        return formatter.string(from: NSNumber(value: value)) ?? String(format: "$%.2f", value)
+    }
+
     private func shortMonthLabel(_ label: String) -> String {
         let parts = label.split(separator: " ")
         guard let first = parts.first else { return label }
         return String(first.prefix(3))
+    }
+
+    private func insightChip(title: String, value: String, tone: InsightTone) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title.uppercased())
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.white)
+                .lineLimit(2)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(tone.background, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
     private func xAxisMonthLabels(
@@ -773,6 +873,20 @@ struct PortfolioView: View {
         return combined.enumerated().compactMap { index, month in
             let isLast = index == combined.count - 1
             return index.isMultiple(of: 2) || isLast ? month : nil
+        }
+    }
+
+    private enum InsightTone {
+        case blue
+        case green
+
+        var background: Color {
+            switch self {
+            case .blue:
+                return Color(hex: "0a84ff").opacity(0.16)
+            case .green:
+                return Color(hex: "34c759").opacity(0.14)
+            }
         }
     }
 }

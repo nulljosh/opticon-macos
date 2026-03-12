@@ -276,7 +276,7 @@ final class OpticonAPI {
         return try decode(EarthquakeResponse.self, from: data).earthquakes
     }
 
-    func fetchFlights(lamin: Double, lomin: Double, lamax: Double, lomax: Double) async throws -> [Flight] {
+    func fetchFlights(lamin: Double, lomin: Double, lamax: Double, lomax: Double) async throws -> FlightFeed {
         let url = try makeURL("/api/flights", query: [
             "lamin": String(lamin),
             "lomin": String(lomin),
@@ -285,7 +285,7 @@ final class OpticonAPI {
         ])
         let request = URLRequest(url: url)
         let data = try await perform(request)
-        return try decode(FlightResponse.self, from: data).states
+        return try decode(FlightFeed.self, from: data)
     }
 
     func fetchIncidents(lat: Double, lon: Double) async throws -> [Incident] {
@@ -393,10 +393,6 @@ private struct StatementsWrapper: Decodable {
 
 private struct EarthquakeResponse: Decodable {
     let earthquakes: [Earthquake]
-}
-
-private struct FlightResponse: Decodable {
-    let states: [Flight]
 }
 
 private struct IncidentResponse: Decodable {

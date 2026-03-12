@@ -157,9 +157,12 @@ struct MarketsView: View {
                         }
                         .width(min: 80, ideal: 100)
                     }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .onAppear {
             isVisible = true
             guard !hasLoaded else { return }

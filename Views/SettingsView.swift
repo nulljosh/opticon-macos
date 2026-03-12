@@ -12,13 +12,13 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Group {
-                settingsList
+                settingsList()
             }
             .navigationTitle("Settings")
         }
     }
 
-    private var settingsList: some View {
+    private func settingsList() -> some View {
         List {
             if appState.isLoggedIn {
                 Section {
@@ -76,8 +76,6 @@ struct SettingsView: View {
                 }
                 .alert("Upgrade to \(upgradeTarget?.title ?? "")", isPresented: $showUpgradeAlert) {
                     Button("Open Web Upgrade") {
-                        // StoreKit 2 requires App Store Connect product setup;
-                        // linking to web upgrade page for now.
                         if let url = URL(string: "https://opticon.heyitsmejosh.com/settings") {
                             openURL(url)
                         }
@@ -95,6 +93,13 @@ struct SettingsView: View {
                     Button("Change Password") {
                         showChangePassword = true
                     }
+                }
+
+                Section("Map Sources") {
+                    Toggle("Earthquakes", isOn: earthquakesBinding)
+                    Toggle("Flights", isOn: flightsBinding)
+                    Toggle("Incidents", isOn: incidentsBinding)
+                    Toggle("Weather Alerts", isOn: weatherBinding)
                 }
 
                 Section {
@@ -140,6 +145,34 @@ struct SettingsView: View {
     private var avatarInitial: String {
         guard let email = appState.user?.email, let first = email.first else { return "?" }
         return String(first).uppercased()
+    }
+
+    private var earthquakesBinding: Binding<Bool> {
+        Binding(
+            get: { appState.situationEarthquakesEnabled },
+            set: { appState.situationEarthquakesEnabled = $0 }
+        )
+    }
+
+    private var flightsBinding: Binding<Bool> {
+        Binding(
+            get: { appState.situationFlightsEnabled },
+            set: { appState.situationFlightsEnabled = $0 }
+        )
+    }
+
+    private var incidentsBinding: Binding<Bool> {
+        Binding(
+            get: { appState.situationIncidentsEnabled },
+            set: { appState.situationIncidentsEnabled = $0 }
+        )
+    }
+
+    private var weatherBinding: Binding<Bool> {
+        Binding(
+            get: { appState.situationWeatherEnabled },
+            set: { appState.situationWeatherEnabled = $0 }
+        )
     }
 
     private var tierLabel: String {
@@ -219,7 +252,10 @@ private struct ChangeEmailSheet: View {
     private func submit() async {
         isSubmitting = true
         defer { isSubmitting = false }
-        let success = await appState.changeEmail(to: newEmail.trimmingCharacters(in: .whitespacesAndNewlines), password: password)
+        let success = await appState.changeEmail(
+            to: newEmail.trimmingCharacters(in: .whitespacesAndNewlines),
+            password: password
+        )
         if success {
             dismiss()
         } else {
@@ -285,7 +321,10 @@ private struct ChangePasswordSheet: View {
 
         isSubmitting = true
         defer { isSubmitting = false }
-        let success = await appState.changePassword(currentPassword: currentPassword, newPassword: newPassword)
+        let success = await appState.changePassword(
+            currentPassword: currentPassword,
+            newPassword: newPassword
+        )
         if success {
             dismiss()
         } else {

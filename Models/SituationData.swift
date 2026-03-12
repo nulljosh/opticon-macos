@@ -42,6 +42,40 @@ private extension KeyedDecodingContainer {
     }
 }
 
+private extension String {
+    var isLowSignalIncidentType: Bool {
+        let normalized = trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "_", with: " ")
+            .replacingOccurrences(of: "-", with: " ")
+            .lowercased()
+        let lowSignalTypes: Set<String> = [
+            "gate",
+            "bollard",
+            "barrier",
+            "obstruction",
+            "hazard",
+            "incident",
+            "closure",
+            "construction",
+            "event"
+        ]
+        return lowSignalTypes.contains(normalized)
+    }
+
+    var normalizedIncidentTitle: String {
+        trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "_", with: " ")
+            .replacingOccurrences(of: "-", with: " ")
+            .split(separator: " ")
+            .map { word in
+                let lowercased = word.lowercased()
+                guard !lowercased.isEmpty else { return "" }
+                return lowercased.prefix(1).uppercased() + lowercased.dropFirst()
+            }
+            .joined(separator: " ")
+    }
+}
+
 struct Earthquake: Decodable, Identifiable {
     let id: String
     let title: String
@@ -166,6 +200,18 @@ struct Flight: Decodable, Identifiable {
     }
 }
 
+struct FlightFeed: Decodable {
+    let states: [Flight]
+    let meta: FlightFeedMeta?
+}
+
+struct FlightFeedMeta: Decodable {
+    let status: String?
+    let warning: String?
+    let cached: Bool?
+    let degraded: Bool?
+}
+
 struct Incident: Decodable, Identifiable {
     let id: String
     let title: String
@@ -205,8 +251,12 @@ struct Incident: Decodable, Identifiable {
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        let fallbackTitle = container.lossyString(forKey: .title)
-            ?? container.lossyString(forKey: .type)
+        let sourceTitle = container.lossyString(forKey: .title)
+        let sourceType = container.lossyString(forKey: .type)
+        let normalizedTitle = sourceTitle?.normalizedIncidentTitle
+        let normalizedType = sourceType?.normalizedIncidentTitle
+        let fallbackTitle = normalizedTitle
+            ?? (sourceType?.isLowSignalIncidentType == true ? nil : normalizedType)
             ?? "Incident"
         title = fallbackTitle
         severity = container.lossyString(forKey: .severity) ?? "info"

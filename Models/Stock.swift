@@ -1,6 +1,27 @@
 import Foundation
 
-struct Stock: Codable, Identifiable, Hashable {
+private extension KeyedDecodingContainer where Key == Stock.CodingKeys {
+    func flexibleDouble(forKey key: Key) -> Double? {
+        if let value = try? decodeIfPresent(Double.self, forKey: key) {
+            return value
+        }
+        if let value = try? decodeIfPresent(Int.self, forKey: key) {
+            return Double(value)
+        }
+        if let value = try? decodeIfPresent(String.self, forKey: key) {
+            let cleaned = value
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .replacingOccurrences(of: "%", with: "")
+                .replacingOccurrences(of: "(", with: "")
+                .replacingOccurrences(of: ")", with: "")
+                .replacingOccurrences(of: "+", with: "")
+            return Double(cleaned)
+        }
+        return nil
+    }
+}
+
+struct Stock: Decodable, Identifiable, Hashable {
     let symbol: String
     let name: String
     let price: Double
@@ -26,6 +47,9 @@ struct Stock: Codable, Identifiable, Hashable {
     enum CodingKeys: String, CodingKey {
         case symbol, name, price, change, volume
         case changePercent = "changesPercentage"
+        case changePercentAlt = "changePercent"
+        case changePercentSnake = "change_percent"
+        case regularMarketChangePercent
         case high52 = "yearHigh"
         case low52 = "yearLow"
     }
@@ -34,12 +58,22 @@ struct Stock: Codable, Identifiable, Hashable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         symbol = try container.decode(String.self, forKey: .symbol)
         name = try container.decodeIfPresent(String.self, forKey: .name) ?? symbol
-        price = try container.decode(Double.self, forKey: .price)
-        change = try container.decodeIfPresent(Double.self, forKey: .change) ?? 0
-        changePercent = try container.decodeIfPresent(Double.self, forKey: .changePercent) ?? 0
-        volume = try container.decodeIfPresent(Double.self, forKey: .volume) ?? 0
-        high52 = try container.decodeIfPresent(Double.self, forKey: .high52) ?? 0
-        low52 = try container.decodeIfPresent(Double.self, forKey: .low52) ?? 0
+        price = container.flexibleDouble(forKey: .price) ?? 0
+        change = container.flexibleDouble(forKey: .change) ?? 0
+        let decodedPercent = container.flexibleDouble(forKey: .changePercent)
+            ?? container.flexibleDouble(forKey: .changePercentAlt)
+            ?? container.flexibleDouble(forKey: .changePercentSnake)
+            ?? container.flexibleDouble(forKey: .regularMarketChangePercent)
+        if let decodedPercent {
+            changePercent = decodedPercent
+        } else if price != 0 {
+            changePercent = (change / (price - change)) * 100
+        } else {
+            changePercent = 0
+        }
+        volume = container.flexibleDouble(forKey: .volume) ?? 0
+        high52 = container.flexibleDouble(forKey: .high52) ?? 0
+        low52 = container.flexibleDouble(forKey: .low52) ?? 0
     }
 
     init(symbol: String, name: String, price: Double, change: Double = 0,

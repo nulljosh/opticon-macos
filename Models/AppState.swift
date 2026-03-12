@@ -5,6 +5,7 @@ import LocalAuthentication
 @Observable
 final class AppState {
     let biometricAuth = BiometricAuthService()
+    private let defaults = UserDefaults.standard
     var user: User?
     var isLoggedIn: Bool { user != nil }
     var showLogin = false
@@ -20,6 +21,30 @@ final class AppState {
     var isLoading = false
     var isAuthenticating = false
     var error: String?
+
+    var situationEarthquakesEnabled: Bool {
+        get { boolPreference(for: "settings.situation.earthquakes", default: true) }
+        set { defaults.set(newValue, forKey: "settings.situation.earthquakes") }
+    }
+
+    var situationFlightsEnabled: Bool {
+        get { boolPreference(for: "settings.situation.flights", default: true) }
+        set { defaults.set(newValue, forKey: "settings.situation.flights") }
+    }
+
+    var situationIncidentsEnabled: Bool {
+        get { boolPreference(for: "settings.situation.incidents", default: true) }
+        set { defaults.set(newValue, forKey: "settings.situation.incidents") }
+    }
+
+    var situationWeatherEnabled: Bool {
+        get { boolPreference(for: "settings.situation.weather", default: true) }
+        set { defaults.set(newValue, forKey: "settings.situation.weather") }
+    }
+    
+    var savedCredentials: (email: String, password: String)? {
+        biometricAuth.loadSavedCredentials()
+    }
 
     var watchlistSymbols: Set<String> {
         Set(watchlist.map(\.symbol))
@@ -67,11 +92,15 @@ final class AppState {
     }
 
     func login(email: String, password: String) async {
-        await authenticate { try await OpticonAPI.shared.login(email: email, password: password) }
+        await authenticate(email: email, password: password) {
+            try await OpticonAPI.shared.login(email: email, password: password)
+        }
     }
 
     func register(email: String, password: String) async {
-        await authenticate { try await OpticonAPI.shared.register(email: email, password: password) }
+        await authenticate(email: email, password: password) {
+            try await OpticonAPI.shared.register(email: email, password: password)
+        }
     }
 
     func saveBiometricCredentials(email: String, password: String) {
@@ -100,11 +129,16 @@ final class AppState {
         }
     }
 
-    private func authenticate(_ request: () async throws -> User) async {
+    private func authenticate(
+        email: String,
+        password: String,
+        _ request: () async throws -> User
+    ) async {
         isAuthenticating = true
         error = nil
         do {
             user = try await request()
+            biometricAuth.saveCredentials(email: email, password: password)
             showLogin = false
         } catch {
             self.error = error.localizedDescription
@@ -114,7 +148,6 @@ final class AppState {
 
     func logout() async {
         try? await OpticonAPI.shared.logout()
-        biometricAuth.clearCredentials()
         user = nil
         portfolio = nil
         watchlist = []
@@ -318,5 +351,12 @@ final class AppState {
         } catch {
             self.error = error.localizedDescription
         }
+    }
+
+    private func boolPreference(for key: String, default defaultValue: Bool) -> Bool {
+        if defaults.object(forKey: key) == nil {
+            return defaultValue
+        }
+        return defaults.bool(forKey: key)
     }
 }

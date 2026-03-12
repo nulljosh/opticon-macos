@@ -8,8 +8,8 @@ struct ContentView: View {
     enum AppSection: String, CaseIterable, Identifiable {
         case situation = "Map"
         case markets = "Markets"
-        case predictions = "Predictions"
         case portfolio = "Portfolio"
+        case predictions = "Predictions"
         case settings = "Settings"
 
         var id: String { rawValue }
@@ -184,8 +184,8 @@ private extension ContentView.AppSection {
         switch self {
         case .situation: return "1"
         case .markets: return "2"
-        case .predictions: return "3"
-        case .portfolio: return "4"
+        case .portfolio: return "3"
+        case .predictions: return "4"
         case .settings: return "5"
         }
     }

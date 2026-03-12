@@ -164,23 +164,17 @@ struct MarketsView: View {
                     .padding(.vertical, 8)
 
                     HStack(spacing: 12) {
-                        NavigationLink {
+                        topLink("News", systemImage: "newspaper") {
                             NewsView()
                                 .environment(appState)
-                        } label: {
-                            Label("News", systemImage: "newspaper")
                         }
-                        NavigationLink {
+                        topLink("Macro", systemImage: "chart.bar.doc.horizontal") {
                             MacroView()
                                 .environment(appState)
-                        } label: {
-                            Label("Macro", systemImage: "chart.bar.doc.horizontal")
                         }
-                        NavigationLink {
+                        topLink("Alerts", systemImage: "bell.badge") {
                             AlertsView()
                                 .environment(appState)
-                        } label: {
-                            Label("Alerts", systemImage: "bell.badge")
                         }
                         Spacer()
                     }
@@ -192,97 +186,17 @@ struct MarketsView: View {
                         .padding(.horizontal)
                         .padding(.bottom, 8)
 
-                    HStack(spacing: 10) {
-                        sortButton(.symbol)
-                            .frame(maxWidth: 140, alignment: .leading)
-                        sortButton(.name)
-                        sortButton(.price)
-                            .frame(maxWidth: 120, alignment: .trailing)
-                        sortButton(.pe)
-                            .frame(maxWidth: 90, alignment: .trailing)
-                        sortButton(.marketCap)
-                            .frame(maxWidth: 120, alignment: .trailing)
-                        sortButton(.change)
-                            .frame(maxWidth: 120, alignment: .trailing)
-                    }
-                    .padding(.horizontal)
-                    .padding(.bottom, 6)
-
-                    HStack {
-                        Text("Sorted by \(activeSortLabel)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Spacer()
-                    }
-                    .padding(.horizontal)
-                    .padding(.bottom, 6)
-
-                    Table(filteredItems) {
-                        TableColumn("Symbol") { item in
-                            HStack(spacing: 6) {
-                                if case .stock(let stock) = item.kind, appState.isLoggedIn {
-                                    Button {
-                                        Task {
-                                            if appState.isInWatchlist(stock.symbol) {
-                                                await appState.removeWatchlistSymbol(stock.symbol)
-                                            } else {
-                                                await appState.addWatchlistSymbol(stock.symbol)
-                                            }
-                                        }
-                                    } label: {
-                                        Image(systemName: appState.isInWatchlist(stock.symbol) ? "star.fill" : "star")
-                                            .foregroundStyle(appState.isInWatchlist(stock.symbol) ? Color(hex: "f5a623") : .secondary)
-                                            .font(.caption)
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                                Text(item.symbol)
-                                    .font(.body.weight(.medium))
-                            }
-                        }
-                        .width(min: 80, ideal: 120)
-
-                        TableColumn("Name") { item in
-                            Text(item.name)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                        }
-                        .width(min: 100, ideal: 200)
-
-                        TableColumn("Price") { item in
-                            Text(String(format: "$%.2f", item.price))
-                                .font(.body.monospacedDigit())
-                        }
-                        .width(min: 80, ideal: 100)
-
-                        TableColumn("P/E") { item in
-                            Text(item.formattedPERatio)
-                                .font(.caption.monospacedDigit())
-                                .foregroundStyle(item.peRatio == nil ? .secondary : .primary)
-                        }
-                        .width(min: 70, ideal: 80)
-
-                        TableColumn("Mkt Cap") { item in
-                            Text(item.formattedMarketCap)
-                                .font(.caption.monospacedDigit())
-                                .foregroundStyle(item.marketCap == nil ? .secondary : .primary)
-                        }
-                        .width(min: 90, ideal: 110)
-
-                        TableColumn("Change") { item in
-                            Text(String(format: "%@%.2f%%", item.changePercent >= 0 ? "+" : "", item.changePercent))
-                                .font(.caption.monospacedDigit())
-                                .foregroundStyle(item.changePercent >= 0 ? Color(hex: "34c759") : Color(hex: "ff3b30"))
-                        }
-                        .width(min: 80, ideal: 100)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    marketList
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .sheet(item: $selectedStock) { stock in
+            StockDetailView(stock: stock)
+                .environment(appState)
+                .frame(minWidth: 720, minHeight: 520)
+        }
         .onAppear {
             isVisible = true
             guard !hasLoaded else { return }
@@ -309,6 +223,142 @@ struct MarketsView: View {
                 _ = await (s, c, k)
             }
         }
+    }
+
+    private var marketList: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 10) {
+                sortButton(.symbol)
+                    .frame(maxWidth: 150, alignment: .leading)
+                sortButton(.name)
+                sortButton(.price)
+                    .frame(maxWidth: 110, alignment: .trailing)
+                sortButton(.pe)
+                    .frame(maxWidth: 84, alignment: .trailing)
+                sortButton(.marketCap)
+                    .frame(maxWidth: 110, alignment: .trailing)
+                sortButton(.change)
+                    .frame(maxWidth: 110, alignment: .trailing)
+            }
+            .padding(.horizontal)
+            .padding(.bottom, 6)
+
+            HStack {
+                Text("Sorted by \(activeSortLabel)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+            }
+            .padding(.horizontal)
+            .padding(.bottom, 8)
+
+            ScrollView {
+                LazyVStack(spacing: 8) {
+                    ForEach(filteredItems) { item in
+                        marketRow(item)
+                    }
+                }
+                .padding(.horizontal)
+                .padding(.bottom, 12)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    private func marketRow(_ item: MarketItem) -> some View {
+        Button {
+            guard case .stock(let stock) = item.kind else { return }
+            selectedStock = stock
+        } label: {
+            HStack(spacing: 10) {
+                HStack(spacing: 6) {
+                    watchlistButton(for: item)
+                    Text(item.symbol)
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(.primary)
+                }
+                .frame(maxWidth: 150, alignment: .leading)
+
+                Text(item.name)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                Text(String(format: "$%.2f", item.price))
+                    .font(.body.monospacedDigit())
+                    .frame(maxWidth: 110, alignment: .trailing)
+
+                Text(item.formattedPERatio)
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(item.peRatio == nil ? .secondary : .primary)
+                    .frame(maxWidth: 84, alignment: .trailing)
+
+                Text(item.formattedMarketCap)
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(item.marketCap == nil ? .secondary : .primary)
+                    .frame(maxWidth: 110, alignment: .trailing)
+
+                Text(String(format: "%@%.2f%%", item.changePercent >= 0 ? "+" : "", item.changePercent))
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(item.changePercent >= 0 ? Color(hex: "34c759") : Color(hex: "ff3b30"))
+                    .frame(maxWidth: 110, alignment: .trailing)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 11)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(Color.white.opacity(0.04))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(Color.white.opacity(0.05), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(!item.isStock)
+    }
+
+    @ViewBuilder
+    private func watchlistButton(for item: MarketItem) -> some View {
+        if case .stock(let stock) = item.kind, appState.isLoggedIn {
+            Button {
+                Task {
+                    if appState.isInWatchlist(stock.symbol) {
+                        await appState.removeWatchlistSymbol(stock.symbol)
+                    } else {
+                        await appState.addWatchlistSymbol(stock.symbol)
+                    }
+                }
+            } label: {
+                Image(systemName: appState.isInWatchlist(stock.symbol) ? "star.fill" : "star")
+                    .foregroundStyle(appState.isInWatchlist(stock.symbol) ? Color(hex: "f5a623") : .secondary)
+                    .font(.caption)
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private func topLink<Destination: View>(
+        _ title: String,
+        systemImage: String,
+        @ViewBuilder destination: () -> Destination
+    ) -> some View {
+        NavigationLink(destination: destination) {
+            Label(title, systemImage: systemImage)
+                .font(.caption.weight(.semibold))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(Color.white.opacity(0.07))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .stroke(Color.white.opacity(0.06), lineWidth: 1)
+                )
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -383,6 +433,11 @@ private struct MarketItem: Identifiable {
     let marketCap: Double?
     let peRatio: Double?
     let kind: Kind
+
+    var isStock: Bool {
+        if case .stock = kind { return true }
+        return false
+    }
 
     var id: String {
         switch kind {
